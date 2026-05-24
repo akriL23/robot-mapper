@@ -1,0 +1,36 @@
+slam_toolbox:
+  ros__parameters:
+    use_odom: false
+    mode: mapping
+    map_frame: map
+    odom_frame: odom
+    base_frame: base_link
+    scan_topic: /scan
+    
+    # Параметры для работы без одометрии (чистый lidar)
+    use_scan_matching: true
+    use_scan_barycenter: true
+    minimum_travel_distance: 0.05
+    minimum_travel_heading: 0.15
+    scan_buffer_size: 10
+    scan_buffer_maximum_scan_distance: 10.0
+    link_match_minimum_response_fine: 0.3
+    link_scan_maximum_distance: 1.5
+    loop_search_maximum_distance: 3.0
+    do_loop_closing: true
+    loop_match_minimum_chain_size: 5
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.3
+    loop_match_minimum_response_fine: 0.45
+    
+    # Корреляционный поиск (критично без одометрии)
+    correlative_search_enabled: true
+    correlative_search_linear_search_distance: 0.3
+    correlative_search_angular_search_distance: 0.35
+    
+    solver_plugin: solver_plugins::CeresSolver
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_trust_strategy: LEVENBERG_MARQUARDT
+    ceres_dogleg_type: TRADITIONAL_DOGLEG
+    ceres_loss_function: None
