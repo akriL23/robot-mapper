@@ -4,88 +4,89 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
-    pkg_dir = get_package_share_directory('robot_mapper')
-    
-    # Параметры SLAM Toolbox (Оптимизированы под Raspberry Pi 4)
-    slam_params = {
-        'use_odom': False,
-        'mode': 'mapping',
-        'map_frame': 'map',
-        'odom_frame': 'odom',
-        'base_frame': 'base_link',
-        'scan_topic': '/scan',
-        
-        # === ОПТИМИЗАЦИЯ ===
-        'transform_timeout': 1.0,            # Увеличенный допуск для TF
-        'transform_publish_period': 0.2,     # Реже публикуем TF
-        'scan_buffer_size': 3,               # Минимальный буфер
-        'minimum_travel_distance': 0.1,      # Игнорируем микро-дрожание
-        'minimum_travel_heading': 0.15,
-        'map_update_interval': 2.0,          # Обновляем карту раз в 2 сек
-        'do_loop_closing': False,            # Отключаем замыкание петель (экономит CPU)
-        'correlative_search_enabled': True,
-        'correlative_search_linear_search_distance': 0.3,
-        'correlative_search_angular_search_distance': 0.35,
-        'solver_plugin': 'solver_plugins::CeresSolver',
-        'ceres_linear_solver': 'SPARSE_NORMAL_CHOLESKY',
-        'ceres_preconditioner': 'SCHUR_JACOBI',
-        'use_sim_time': False
-    }
+    pkg_share = get_package_share_directory('robot_mapper')
 
     return LaunchDescription([
-        # 1. Основная нода (Драйверы)
+        # ── 1. Core: Lidar, Motors, Odom, TF ────────────────────────
         Node(
             package='robot_mapper',
             executable='robot_ros_node',
-            name='robot_node',
-            output='screen',
-            emulate_tty=True
+            name='robot_ros_node',
+            output='screen'
         ),
-        # 2. Веб-управление
-        Node(
-            package='robot_mapper',
-            executable='web_control',
-            name='web_node',
-            output='screen',
-            respawn=True,
-            emulate_tty=True
-        ),
-        # 3. Мультиплексор скоростей
+
+        # ── 2. Multiplexer: Prioritizes Manual over Auto ────────────
         Node(
             package='robot_mapper',
             executable='cmd_vel_mux',
-            name='cmd_mux',
+            name='cmd_vel_mux',
             output='screen',
-            respawn=True,
-            emulate_tty=True
+            parameters=[{
+                'manual_timeout': 0.8,  # Match web_control.py keepalive
+                'auto_timeout': 1.2,
+                'loop_hz': 40.0
+            }]
         ),
-        # 4. SLAM (Картографирование)
+
+        # ── 3. Ultrasonic Sensors (4 sensors) ───────────────────────
         Node(
-            package='slam_toolbox',
-            executable='async_slam_toolbox_node',
-            name='slam_toolbox',
-            output='screen',
-            respawn=True,
-            emulate_tty=True,
-            parameters=[slam_params]
+            package='robot_mapper',
+            executable='ultrasonic_node',
+            name='ultrasonic_node',
+            output='screen'
         ),
-        # 4. Камера (V1.3)
+
+        # ── 4. Joystick Hardware Driver (reads /dev/input/js0) ──────
+        Node(
+            package='joy',
+            executable='joy_node',
+            name='joy_node',
+            output='screen',
+            parameters=[{
+                'dev': '/dev/input/js0',
+                'autorepeat_rate': 20.0  # Send data even when idle (for UI)
+            }]
+        ),
+
+        # ── 5. Joystick Logic: /joy -> /cmd_vel/manual ──────────────
+        Node(
+            package='robot_mapper',
+            executable='joystick_control',
+            name='joystick_control',
+            output='screen',
+            parameters=[{
+                'linear_scale': 0.5,
+                'angular_scale': 1.5
+            }]
+        ),
+
+        # ── 6. Camera (USB /dev/video0) ─────────────────────────────
         Node(
             package='robot_mapper',
             executable='camera_publisher',
-            name='camera_node',
-            output='screen',
-            respawn=True,
-            emulate_tty=True
+            name='camera_publisher',
+            output='screen'
         ),
-        # 5. Мост Foxglove
+
+        # ── 7. Web Control UI (Flask Server + Status Node) ──────────
+        Node(
+            package='robot_mapper',
+            executable='web_control',
+            name='web_control',
+            output='screen'
+        ),
+
+        # ── 8. Foxglove Bridge (WebSocket) ──────────────────────────
+        # ИСПРАВЛЕНО: executable='foxglove_bridge' (без _node)
         Node(
             package='foxglove_bridge',
-            executable='foxglove_bridge',
-            name='fg_bridge',
+            executable='foxglove_bridge', 
+            name='foxglove_bridge',
             output='screen',
-            respawn=True,
-            emulate_tty=True,
-            parameters=[{'port': 8765, 'max_qos_depth': 10}]
-        )
+            parameters=[{
+                'port': 8765,
+                'address': '0.0.0.0',       # Слушать все интерфейсы
+                'send_buffer_limit': 10000000 # Буфер для лидара/камеры
+            }]
+        ),
     ])
