@@ -25,7 +25,7 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan, Joy, Range
 from nav_msgs.msg import Odometry, OccupancyGrid
-from std_msgs.msg import String
+from std_msgs.msg import String, Bool
 
 # ─────────────────────────────────────────────────────────────────────────────
 HTML = r"""<!DOCTYPE html>
@@ -600,7 +600,8 @@ class WebControlNode(Node):
         super().__init__('web_control')
 
         # ── Publishers ───────────────────────────────────────────────────────
-        self.pub_cmd = self.create_publisher(Twist, '/cmd_vel/manual', 10)
+        self.pub_cmd         = self.create_publisher(Twist, '/cmd_vel/manual', 10)
+        self.pub_auto_enable = self.create_publisher(Bool,  '/auto_enable',    10)
 
         # ── Topic timestamps ─────────────────────────────────────────────────
         self.t_scan = self.t_map = self.t_odom = None
@@ -675,6 +676,13 @@ class WebControlNode(Node):
         self._last_twist.angular.z = float(az)
         self._manual_active = True
         self.pub_cmd.publish(self._last_twist)
+
+    def set_auto_enable(self, enabled: bool):
+        """Публикуем /auto_enable несколько раз для надёжности."""
+        msg = Bool()
+        msg.data = enabled
+        for _ in range(5):
+            self.pub_auto_enable.publish(msg)
 
     def stop(self):
         self._last_twist    = Twist()
@@ -758,6 +766,9 @@ def api_start():
     with _lock:
         if auto_proc and auto_proc.poll() is None:
             return jsonify({'status': 'running'})
+        # Сначала сигнализируем мультиплексору ДО запуска процесса
+        if node:
+            node.set_auto_enable(True)
         auto_proc = subprocess.Popen(
             ['ros2', 'run', 'robot_mapper', 'auto_explorer'],
             start_new_session=True
@@ -768,13 +779,22 @@ def api_start():
 @app.route('/api/auto/stop', methods=['POST'])
 def api_stop():
     global auto_proc
+    # ШАГ 1: НЕМЕДЛЕННО сообщаем мультиплексору — авто выключено.
+    # Мультиплексор перестаёт пропускать /cmd_vel/auto до того,
+    # как процесс успеет прислать ещё одну команду.
+    if node:
+        node.set_auto_enable(False)
+        node.stop()   # явный ноль в /cmd_vel/manual тоже
+
+    # ШАГ 2: убиваем процесс (уже не страшно если он пришлёт ещё команду —
+    # мультиплексор её заблокировал)
     with _lock:
         if auto_proc and auto_proc.poll() is None:
             auto_proc.send_signal(signal.SIGINT)
             try:    auto_proc.wait(timeout=3)
             except: auto_proc.kill(); auto_proc.wait(timeout=2)
         auto_proc = None
-    if node: node.stop()
+
     return jsonify({'status': 'stopped'})
 
 
