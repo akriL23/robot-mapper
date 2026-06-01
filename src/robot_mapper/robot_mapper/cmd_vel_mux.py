@@ -30,8 +30,8 @@ class CmdVelMux(Node):
         super().__init__('cmd_vel_mux')
 
         # ── Parameters ───────────────────────────────────────────────────────
-        self.declare_parameter('manual_timeout', 0.30)  # 300мс — keep-alive джойстика 20 Гц
-        self.declare_parameter('auto_timeout',   0.30)  # 300мс — быстрый стоп после смерти авто
+        self.declare_parameter('manual_timeout', 0.15)  # 300мс — keep-alive джойстика 20 Гц
+        self.declare_parameter('auto_timeout',   0.15)  # 300мс — быстрый стоп после смерти авто
         self.declare_parameter('loop_hz',        50.0)
 
         self.MANUAL_TIMEOUT = self.get_parameter('manual_timeout').value

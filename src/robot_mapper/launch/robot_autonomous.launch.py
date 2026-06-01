@@ -44,10 +44,15 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'dev': '/dev/input/js0',
-                'autorepeat_rate': 20.0  # Send data even when idle (for UI)
+                # 🔥 КРИТИЧНО: Частота опроса. 
+                # 20-40 Гц обеспечивают плавность без задержек.
+                'autorepeat_rate': 30.0, 
+                #  Мертвая зона. 0.05-0.1 убирает дрейф, но не влияет на отзывчивость.
+                'deadzone': 0.05,
+                # Убираем коалисценцию (объединение пакетов), чтобы данные шли сразу
+                'coalesce_interval': 0.0 
             }]
         ),
-
         # ── 5. Joystick Logic: /joy -> /cmd_vel/manual ──────────────
         Node(
             package='robot_mapper',
